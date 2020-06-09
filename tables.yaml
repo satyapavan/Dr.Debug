@@ -1,0 +1,18 @@
+domains:
+  -
+      name: EMPLOYEE
+      connection: 'SCOTT/TIGER@127.0.0.1:1522/MRTOUBLE'
+      tables:
+        -
+            NAME: EMP
+            KEY: DEPTNO
+        -
+            NAME: DEPT
+            KEY: DEPTNO
+  -
+      name: SALARY
+      connection: 'SCOTT/TIGER@127.0.0.1:1522/MRTOUBLE'
+      tables:
+        -
+            NAME: SALGRADE
+            KEY: GRADE
