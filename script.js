@@ -8,8 +8,6 @@ function createTable(domainName, tableName, tableData) {
     var tableBody = document.createElement('tbody');
     var tableHead = document.createElement('thead');
 
-
-
     var headRow = true;
     tableData.forEach(function(rowData) {
         var row = document.createElement('tr');
@@ -40,29 +38,15 @@ function createTable(domainName, tableName, tableData) {
     table.appendChild(tableHead);
     table.appendChild(tableBody);
 
-    var tCard = document.createElement('div');
-    tCard.classList.add('card');
-
-    var tCardHead = document.createElement('div');
-    tCardHead.classList.add('card-header');
-    tCardHead.classList.add('text-white');
-    tCardHead.classList.add('bg-secondary');
-    tCardHead.classList.add('font-weight-bold');
-    tCardHead.innerText = domainName + '.' + tableName;
-
-    var tCardBody = document.createElement('div');
-    tCardBody.classList.add('card-body');
-    tCardBody.appendChild(table);
-
-    tCard.appendChild(tCardHead);
-    tCard.appendChild(tCardBody);
-
-    document.getElementById('master-container').appendChild(tCard);
+    document.getElementById('data-container').appendChild(table);
 }
 
 function processResponse(data){
-    console.log("Inside processResponse()", data);  
-    console.log(data["EMPLOYEE"]); 
+    console.log("Inside processResponse()", data);
+
+    clearDataContainer(false); // This will clear the current spinner
+
+    var no_records_found = true;
 
     for(key in data) {
         console.log('Domain Name = ' + key);
@@ -71,11 +55,16 @@ function processResponse(data){
             if( Array.isArray(data[key][itrTable]) ) {
                 console.log('Table Name = ' + itrTable + ' :: isArray = ' + Array.isArray(data[key][itrTable]))
                 createTable(key, itrTable, data[key][itrTable])
+                no_records_found = false;
             }
             else {
                 console.log('Key = ' + itrTable + ' :: value = ' + data[key][itrTable]);
             }
         }
+    }
+
+    if(no_records_found) {
+        document.getElementById('data-container').appendChild(document.createTextNode('No Records found'));
     }
 }
 
@@ -91,6 +80,22 @@ function startTrouble(env, key, value) {
     getData().then( data => processResponse(data) );
 }
 
+function clearDataContainer(doSpinner) {
+    // This is the fastest way to remove the child class rather than loop through them to delete
+    // https://stackoverflow.com/questions/3955229/remove-all-child-elements-of-a-dom-node-in-javascript
+    var dataContainer = document.getElementById("data-container");
+    
+    if(doSpinner) {
+        console.log('Adding spinner after clearing the container');
+        dataContainer.innerHTML = '<div class="row">    <div class="col-md-8 offset-md-2">    <div id="id-spinner" class="lds-hourglass"></div>     </div>  </div>';
+  
+  '<div id="id-spinner" class="lds-hourglass"></div>';
+    } else {
+        console.log('Clearing the container and not adding spinner');
+        dataContainer.textContent = '';
+    }
+}
+
 document.getElementById("id-submit").addEventListener("click", function(){
     console.log('Entered into submit form');
 
@@ -103,7 +108,6 @@ document.getElementById("id-submit").addEventListener("click", function(){
     var t_value = document.getElementById("id-value").value;
     console.log(t_value)
 
-   
     if( t_value == '' ){
         document.getElementById("id-value").classList.add('is-invalid');
         return;
@@ -112,6 +116,13 @@ document.getElementById("id-submit").addEventListener("click", function(){
         document.getElementById("id-value").classList.remove('is-invalid');
     }
 
+    if(t_env === 'on') {
+        t_env = 'SIT'
+    } else {
+        t_env = 'UAT'
+    }
+    
+    clearDataContainer(true);
     startTrouble(t_env, t_key, t_value);
 
 } );

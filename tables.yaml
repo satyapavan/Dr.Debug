@@ -1,7 +1,6 @@
 domains:
   -
       name: EMPLOYEE
-      connection: 'SCOTT/TIGER@127.0.0.1:1522/MRTOUBLE'
       tables:
         -
             NAME: EMP
@@ -9,9 +8,9 @@ domains:
         -
             NAME: DEPT
             KEY: DEPTNO
+            EXPLICIT_WCLAUSE: 'WHERE DEPTNO in '
   -
       name: SALARY
-      connection: 'SCOTT/TIGER@127.0.0.1:1522/MRTOUBLE'
       tables:
         -
             NAME: SALGRADE

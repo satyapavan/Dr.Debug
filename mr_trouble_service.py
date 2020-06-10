@@ -3,6 +3,7 @@ import flask
 from flask import request, jsonify, request, send_from_directory
 import cx_Oracle
 import yaml
+import time
 
 app = flask.Flask(__name__,
                   static_url_path='',
@@ -25,8 +26,11 @@ def perf(f):
         kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
         signature = ", ".join(args_repr + kwargs_repr)
         print(f'--> START - Calling {f.__name__}({signature})')
+        start_time = time.perf_counter()
         retVal = f(*args, **kwargs)
-        print(f'--> END   - {f.__name__!r} returned {retVal!r}')
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        print(f'--> END   - {f.__name__!r} returned {retVal!r} - in {run_time:.4f} secs')
         return retVal
     return _perf
 
@@ -46,6 +50,7 @@ class TRex:
         self._db_keys = {}
         self._db_keys['DEPTNO'] = "10,20,30,40"
         self._db_keys['GRADE'] = "1,2,3,4,5"
+        self._db_keys[self._key] = self._env
 
         self._results = {'env':self._env,
                          'key':self._key,
@@ -58,9 +63,17 @@ class TRex:
 
         return self._results
 
-    def _fetch_records_per_table(self, cur, p_table_name, p_key):
+    def _fetch_records_per_table(self, cur, p_table_name, p_key, p_table_wclause):
         try:
-            query = "SELECT * FROM {} WHERE {} in ({})".format(p_table_name, p_key, self._db_keys[p_key] if p_key in self._db_keys else None)
+            if p_table_wclause is None:
+                query = "SELECT * FROM {} WHERE {} in ({})".format(p_table_name,
+                                                                   p_key,
+                                                                   self._db_keys[p_key] if p_key in self._db_keys else None)
+            else:
+                query = "SELECT * FROM {} {} ({})".format(p_table_name,
+                                                          p_table_wclause,
+                                                          self._db_keys[p_key] if p_key in self._db_keys else None)
+
             print('Query is {}'.format(query))
             cur.execute(query)
             print([row[0] for row in cur.description])
@@ -77,22 +90,33 @@ class TRex:
         except cx_Oracle.Error as error:
             print(error)
 
-    def _fetch_records_per_domain(self, domain_name, domain_obj):
+    def _fetch_records_per_domain(self, domain_name, list_tables):
         try:
             """
             You can let Python automatically closes the connection when the reference to the connection goes out of scope by using the `with` block:
             """
-            with cx_Oracle.connect(
-                    'SCOTT',
-                    'TIGER',
-                    '127.0.0.1:1522/MRTROUBLE') as connection:
+            with open(r'config.yaml') as file:
+                documents = yaml.full_load(file)
+
+                db_conn = documents[self._env][domain_name] if self._env in documents and domain_name in documents[self._env] else None
+                print('DB Connection = {}'.format(db_conn))
+
+            with cx_Oracle.connect(db_conn) as connection:
 
                 # show the version of the Oracle Database
                 print(connection.version)
                 cur = connection.cursor()
 
-                for table_name, table_key in domain_obj.items():
-                    db_results = self._fetch_records_per_table(cur, table_name, table_key)
+                for itrTables in list_tables:
+                    table_name = list_tables['NAME'] if 'NAME' in list_tables else None
+                    table_key = list_tables['KEY'] if 'KEY' in list_tables else None
+                    table_wclause = list_tables['EXPLICIT_WCLAUSE'] if 'EXPLICIT_WCLAUSE' in list_tables else None
+
+                    print('Table name is {}'.format(table_name))
+                    print('Table key is {}'.format(table_key))
+                    print('Table wClause is {}'.format(table_wclause))
+
+                    db_results = self._fetch_records_per_table(cur, table_name, table_key, table_wclause)
                     if domain_name not in self._results:
                         self._results[domain_name] = {}
 
@@ -112,17 +136,7 @@ class TRex:
                     domain_name = itrDomains['name'] if 'name' in itrDomains else None
                     print('Domain name is {}'.format(domain_name))
                     if 'tables' in itrDomains:
-                        tables = {}
-                        for itrTables in itrDomains['tables']:
-                            table_name = itrTables['NAME'] if 'NAME' in itrTables else None
-                            table_key = itrTables['KEY'] if 'KEY' in itrTables else None
-                            tables[table_name] = table_key;
-
-                            print('Table name is {}'.format(table_name))
-                            print('Table key is {}'.format(table_key))
-
-                        print(tables)
-                        self._fetch_records_per_domain(domain_name, tables)
+                        self._fetch_records_per_domain(domain_name, itrDomains['tables'])
 
 ####################################################################################################################
 
