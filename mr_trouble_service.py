@@ -50,7 +50,7 @@ class TRex:
         self._db_keys = {}
         self._db_keys['DEPTNO'] = "10,20,30,40"
         self._db_keys['GRADE'] = "1,2,3,4,5"
-        self._db_keys[self._key] = self._env
+        self._db_keys[self._key] = self._value
 
         self._results = {'env':self._env,
                          'key':self._key,
@@ -108,9 +108,9 @@ class TRex:
                 cur = connection.cursor()
 
                 for itrTables in list_tables:
-                    table_name = list_tables['NAME'] if 'NAME' in list_tables else None
-                    table_key = list_tables['KEY'] if 'KEY' in list_tables else None
-                    table_wclause = list_tables['EXPLICIT_WCLAUSE'] if 'EXPLICIT_WCLAUSE' in list_tables else None
+                    table_name = itrTables['NAME'] if 'NAME' in itrTables else None
+                    table_key = itrTables['KEY'] if 'KEY' in itrTables else None
+                    table_wclause = itrTables['EXPLICIT_WCLAUSE'] if 'EXPLICIT_WCLAUSE' in itrTables else None
 
                     print('Table name is {}'.format(table_name))
                     print('Table key is {}'.format(table_key))
