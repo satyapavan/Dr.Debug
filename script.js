@@ -1,4 +1,15 @@
 function createTable(domainName, tableName, tableData) {
+    var tableNameSpan = document.createElement('span');
+    tableNameSpan.classList.add('badge');
+    tableNameSpan.classList.add('badge-secondary');
+    
+    tableNameSpan.appendChild(document.createTextNode(domainName + '.' + tableName));
+
+    eleH = document.createElement('h3');
+    eleH.appendChild(tableNameSpan);
+
+    document.getElementById('data-container').appendChild(eleH);
+
     var table = document.createElement('table');
     table.classList.add('table');
     table.classList.add('table-striped');
@@ -39,6 +50,7 @@ function createTable(domainName, tableName, tableData) {
     table.appendChild(tableBody);
 
     document.getElementById('data-container').appendChild(table);
+    document.getElementById('data-container').appendChild(document.createElement('hr'));
 }
 
 function processResponse(data){
