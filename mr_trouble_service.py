@@ -9,8 +9,9 @@ app = flask.Flask(__name__,
                   static_url_path='',
                   static_folder=''
                   )
-app.config["DEBUG"] = True
-app.config["ENV"] = 'development'
+app.config['DEBUG'] = True
+app.config['ENV'] = 'development'
+app.config['JSON_KEYS_SORT'] = False
 
 """
 http://127.0.0.1:5000/t-rex/api/query?ENV=SIT&KEY=SVCORDER_ID&VALUE=23/%2045
@@ -30,7 +31,8 @@ def perf(f):
         retVal = f(*args, **kwargs)
         end_time = time.perf_counter()
         run_time = end_time - start_time
-        print(f'--> END   - {f.__name__!r} returned {retVal!r} - in {run_time:.4f} secs')
+        print(f'--> END   - {f.__name__} - in {run_time:.4f} secs')
+        #print(f'--> END   - {f.__name__!r} returned {retVal!r} - in {run_time:.4f} secs')
         return retVal
     return _perf
 
@@ -63,6 +65,7 @@ class TRex:
 
         return self._results
 
+    @perf
     def _fetch_records_per_table(self, cur, p_table_name, p_key, p_table_wclause):
         try:
             if p_table_wclause is None:
@@ -90,6 +93,7 @@ class TRex:
         except cx_Oracle.Error as error:
             print(error)
 
+    @perf
     def _fetch_records_per_domain(self, domain_name, list_tables):
         try:
             """
@@ -127,6 +131,7 @@ class TRex:
         except cx_Oracle.Error as error:
             print(error)
 
+    @perf
     def processAPI(self):
         with open(r'tables.yaml') as file:
             documents = yaml.full_load(file)
