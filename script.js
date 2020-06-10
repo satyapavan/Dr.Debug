@@ -65,6 +65,8 @@ function processResponse(data){
 
     if(no_records_found) {
         document.getElementById('data-container').appendChild(document.createTextNode('No Records found'));
+    } else {
+        document.getElementById('data-container').classList.add('mx-0');
     }
 }
 
@@ -85,11 +87,11 @@ function clearDataContainer(doSpinner) {
     // https://stackoverflow.com/questions/3955229/remove-all-child-elements-of-a-dom-node-in-javascript
     var dataContainer = document.getElementById("data-container");
     
+    dataContainer.classList.remove('mx-0');
+
     if(doSpinner) {
         console.log('Adding spinner after clearing the container');
         dataContainer.innerHTML = '<div class="row">    <div class="col-md-8 offset-md-2">    <div id="id-spinner" class="lds-hourglass"></div>     </div>  </div>';
-  
-  '<div id="id-spinner" class="lds-hourglass"></div>';
     } else {
         console.log('Clearing the container and not adding spinner');
         dataContainer.textContent = '';
