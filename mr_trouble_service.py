@@ -1,6 +1,7 @@
 #import yaml
 import flask
 from flask import request, jsonify, request, send_from_directory
+import concurrent.futures
 import cx_Oracle
 import yaml
 import time
@@ -49,6 +50,7 @@ class TRex:
         self._svc_order_id = ""
         self._service_id = ""
         self._trail_id = 0
+        self._db_conn = {}
         self._db_keys = {}
         self._db_keys['DEPTNO'] = "10,20,30,40"
         self._db_keys['GRADE'] = "1,2,3,4,5"
@@ -93,8 +95,29 @@ class TRex:
         except cx_Oracle.Error as error:
             print(error)
 
+    def _close_all_db_connections(self):
+        try:
+            for key, value in self._db_conn.items():
+                print(f'Closing the DB connection for {key}')
+                value.close()
+        except cx_Oracle.Error as error:
+            print(error)
+
+    def _open_db_connection(self, list_of_domain_conn):
+        try:
+            domain_name, db_conn = list_of_domain_conn
+            print("Inside ", list_of_domain_conn)
+
+            connection = cx_Oracle.connect(db_conn)
+            print('DB Connection = {}'.format(db_conn))
+
+            self._db_conn[domain_name] = connection
+            print(self._db_conn)
+        except cx_Oracle.Error as error:
+            print(error)
+
     @perf
-    def _fetch_records_per_domain(self, domain_name, list_tables):
+    def _open_db_connections_loop(self):
         try:
             """
             You can let Python automatically closes the connection when the reference to the connection goes out of scope by using the `with` block:
@@ -102,11 +125,18 @@ class TRex:
             with open(r'config.yaml') as file:
                 documents = yaml.full_load(file)
 
-                db_conn = documents[self._env][domain_name] if self._env in documents and domain_name in documents[self._env] else None
-                print('DB Connection = {}'.format(db_conn))
+                if self._env in documents:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        executor.map(self._open_db_connection, list(documents[self._env].items()))
 
-            with cx_Oracle.connect(db_conn) as connection:
+        except Exception as error:
+            print(error)
 
+    @perf
+    def _fetch_records_per_domain(self, domain_name, list_tables):
+        try:
+            if domain_name in self._db_conn:
+                connection = self._db_conn[domain_name]
                 # show the version of the Oracle Database
                 print(connection.version)
                 cur = connection.cursor()
@@ -133,6 +163,9 @@ class TRex:
 
     @perf
     def processAPI(self):
+
+        self._open_db_connections_loop()
+
         with open(r'tables.yaml') as file:
             documents = yaml.full_load(file)
 
@@ -142,6 +175,9 @@ class TRex:
                     print('Domain name is {}'.format(domain_name))
                     if 'tables' in itrDomains:
                         self._fetch_records_per_domain(domain_name, itrDomains['tables'])
+
+        self._close_all_db_connections()
+
 
 ####################################################################################################################
 
