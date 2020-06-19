@@ -58,8 +58,6 @@ class TRex:
         self._trail_id = 0
         self._db_conn = {}
         self._db_keys = {}
-        self._db_keys['DEPTNO'] = "10,20,30,40"
-        self._db_keys['GRADE'] = "1,2,3,4,5"
         self._db_keys[self._key] = self._value
 
         self._results = {'env':self._env,
@@ -74,56 +72,49 @@ class TRex:
         return self._results
 
     @perf
-    def _fetch_records_per_table(self, cur, p_table_name, p_key, p_table_wclause):
+    def _load_init_keys(self):
+        """
+        Place holder function to load other KEY's, based on the given key.
+        Database is already opened during this time and the DEFAULT connection can be used for the same
+        """
+        self._db_keys['DEPTNO'] = "10,20,30,40"
+        self._db_keys['GRADE'] = "1,2,3,4,5"
+
+
+    def _is_open(self, conn):
         try:
-            if p_table_wclause is None:
-                query = "SELECT * FROM {} WHERE {} in ({})".format(p_table_name,
-                                                                   p_key,
-                                                                   self._db_keys[p_key] if p_key in self._db_keys else None)
-            else:
-                query = "SELECT * FROM {} {} ({})".format(p_table_name,
-                                                          p_table_wclause,
-                                                          self._db_keys[p_key] if p_key in self._db_keys else None)
-
-            logging.debug('Query is {}'.format(query))
-            cur.execute(query)
-            logging.debug([row[0] for row in cur.description])
-            records = [[row[0] for row in cur.description]]
-
-            for itr in cur:
-                records.append(list(itr))
-
-            logging.debug(records)
-            logging.debug(cur.description)
-
-            return records
-
+            logging.debug(f'Checking connection status')
+            return True
         except cx_Oracle.Error as error:
             logging.error(error)
 
-    def _close_all_db_connections(self):
-        try:
-            for key, value in self._db_conn.items():
-                logging.debug(f'Closing the DB connection for {key}')
-                value.close()
-        except cx_Oracle.Error as error:
-            logging.error(error)
-
-    def _open_db_connection(self, list_of_domain_conn):
+    def _handle_db_connection(self, list_of_domain_conn):
         try:
             domain_name, db_conn = list_of_domain_conn
             logging.debug("Inside {}".format(list_of_domain_conn))
 
-            connection = cx_Oracle.connect(db_conn)
-            logging.debug('DB Connection = {}'.format(db_conn))
+            if domain_name not in self._db_conn:
+                logging.debug('DB Connection = {}'.format(db_conn))
 
-            self._db_conn[domain_name] = connection
-            logging.debug(self._db_conn)
+                connection = cx_Oracle.connect(db_conn)
+                self._db_conn[domain_name] = connection
+
+                logging.debug('Total connections [{}] so far are {}'.format(len(self._db_conn), self._db_conn))
+
+            elif domain_name in self._db_conn:
+                if self._is_open(self._db_conn[domain_name]):
+                    logging.debug(f'Closing the DB connection for {self._db_conn[domain_name]}')
+                    self._db_conn[domain_name].close()
+                else:
+                    logging.debug(f'DB connection already close for for {self._db_conn[domain_name]}')
+
+                self._db_conn.popitem(domain_name)
+
         except cx_Oracle.Error as error:
             logging.error(error)
 
     @perf
-    def _open_db_connections_loop(self):
+    def _handle_db_connections(self):
         try:
             """
             You can let Python automatically closes the connection when the reference to the connection goes out of scope by using the `with` block:
@@ -133,14 +124,44 @@ class TRex:
 
                 if self._env in documents:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                        executor.map(self._open_db_connection, list(documents[self._env].items()))
+                        executor.map(self._handle_db_connection, list(documents[self._env].items()))
 
         except Exception as error:
             logging.error(error)
 
     @perf
+    def _fetch_records_per_table(self, cur, p_table_name, p_key, p_table_wclause):
+        try:
+            logging.debug(f'Table name is [{p_table_name}] : kEY is [{p_key}] : wClause is [{p_table_wclause}]')
+
+            if p_table_wclause is None:
+                query = "SELECT * FROM {} WHERE {} in ({})".format(p_table_name,
+                                                                   p_key,
+                                                                   self._db_keys[p_key] if p_key in self._db_keys else None)
+            else:
+                query = "SELECT * FROM {} {} ({})".format(p_table_name,
+                                                          p_table_wclause,
+                                                          self._db_keys[p_key] if p_key in self._db_keys else None)
+
+            logging.debug('Query is [{}]'.format(query))
+            cur.execute(query)
+            logging.debug(f'Columns for {p_table_name} are {[row[0] for row in cur.description]}')
+            records = [[row[0] for row in cur.description]]
+
+            for itr in cur:
+                records.append(list(itr))
+
+            logging.debug(f'Final Data for {p_table_name} are {records}')
+
+            return records
+
+        except cx_Oracle.Error as error:
+            logging.error(error)
+
+    @perf
     def _fetch_records_per_domain(self, domain_name, list_tables):
         try:
+            logging.debug('Domain name is {}'.format(domain_name))
             if domain_name in self._db_conn:
                 connection = self._db_conn[domain_name]
                 # show the version of the Oracle Database
@@ -152,25 +173,20 @@ class TRex:
                     table_key = itrTables['KEY'] if 'KEY' in itrTables else None
                     table_wclause = itrTables['EXPLICIT_WCLAUSE'] if 'EXPLICIT_WCLAUSE' in itrTables else None
 
-                    logging.debug('Table name is {}'.format(table_name))
-                    logging.debug('Table key is {}'.format(table_key))
-                    logging.debug('Table wClause is {}'.format(table_wclause))
-
                     db_results = self._fetch_records_per_table(cur, table_name, table_key, table_wclause)
+
                     if domain_name not in self._results:
                         self._results[domain_name] = {}
 
                     self._results[domain_name][table_name] = db_results
-
-                logging.debug(self._results)
 
         except cx_Oracle.Error as error:
             logging.error(error)
 
     @perf
     def processAPI(self):
-
-        self._open_db_connections_loop()
+        self._load_init_keys()
+        self._handle_db_connections()
 
         with open(r'tables.yaml') as file:
             documents = yaml.full_load(file)
@@ -178,12 +194,10 @@ class TRex:
             if 'domains' in documents:
                 for itrDomains in documents['domains']:
                     domain_name = itrDomains['name'] if 'name' in itrDomains else None
-                    logging.debug('Domain name is {}'.format(domain_name))
                     if 'tables' in itrDomains:
                         self._fetch_records_per_domain(domain_name, itrDomains['tables'])
 
-        self._close_all_db_connections()
-
+        self._handle_db_connections()
 
 ####################################################################################################################
 
@@ -206,9 +220,9 @@ def query():
             p_key = request.args['KEY'] if 'KEY' in request.args else 'None'
             p_value = request.args['VALUE'] if 'VALUE' in request.args else 'None'
 
-        logging.debug('type(p_env) = {} - value = {}'.format(type(p_env), p_env) )
-        logging.debug('type(p_key) = {} - value = {}'.format(type(p_key), p_key))
-        logging.debug('type(p_value) = {} - value = {}'.format(type(p_value), p_value))
+        logging.debug('ENV - type(p_env) = {} - value = {}'.format(type(p_env), p_env) )
+        logging.debug('KEY - type(p_key) = {} - value = {}'.format(type(p_key), p_key))
+        logging.debug('VALUE - type(p_value) = {} - value = {}'.format(type(p_value), p_value))
 
         if p_env == 'None' or p_key == 'None' or p_value == 'None' :
             ## TODO - see if we can comeup with an exception class and properly passon the message. currently, status code is missing
@@ -218,11 +232,8 @@ def query():
     ####################################################################################################################
 
         objTRex = TRex(p_env, p_key, p_value)
-        logging.debug(jsonify(objTRex.results()))
-        logging.debug(objTRex.results())
-        logging.debug(objTRex)
-        logging.debug(objTRex.__dict__)  ## This is also an alternative to use rather than overriding __str__
         objTRex.processAPI()
+        logging.debug(f'Final Results are {objTRex.results()}')
 
     ####################################################################################################################
 
@@ -237,8 +248,6 @@ def query():
 def main():
     logging.debug("Hello!")
     app.config["DEBUG"] = True
-
-    logging.debug("Hello {}".format('World'))
 
 if __name__ == "__main__": main()
 
